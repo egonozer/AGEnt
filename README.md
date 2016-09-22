@@ -65,7 +65,7 @@ If an annotated Genbank file is given as the query sequence (-q), gene coordinat
 format of ORF coordinate file given to -c. Options are:
 - 'glimmer'
 - 'genemark'
-- 'prodigal' ('gbk' or web format) 
+- 'prodigal' ('gbk' or web format)
 - 'gff'
 (default: glimmer)
 
