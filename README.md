@@ -63,10 +63,10 @@ If an annotated Genbank file is given as the query sequence (-q), gene coordinat
 
   `-f`  
 format of ORF coordinate file given to -c. Options are:
--'glimmer'
--'genemark'
--'prodigal' ('gbk' or web format) 
--'gff'
+- 'glimmer'
+- 'genemark'
+- 'prodigal' ('gbk' or web format) 
+- 'gff'
 (default: glimmer)
 
   `-l`  
@@ -120,8 +120,8 @@ _Column headers and descriptions:_
 
 __coords.txt__  
 Coordinates of genome sequences.   
-"*.accessory_coords.txt": Accessory genome sequences for the indicated strain  
-"*.core_coords.txt": Core genome sequences for the indicated strain  
+"\*.accessory_coords.txt": Accessory genome sequences for the indicated strain  
+"\*.core_coords.txt": Core genome sequences for the indicated strain  
 _Column headers and descriptions:_  
 * contig_id: sequence ID of the source strain contig
 * contig_length: length, in bases, of the source strain contig
@@ -134,9 +134,9 @@ Nucleotide sequences of the genome segments output by AGEnt. Original sources of
 
 __loci.txt__ (if annotated genbank file was provided for the query genome)  
 List of coding sequences found in the core genome.  
-"*.accessory_loci.txt": Accessory genome coding sequences for the indicated strain  
-"*.core_loci.txt": Core genome coding sequences for the indicated strain  
-__Column headers and descriptions:__  
+"\*.accessory_loci.txt": Accessory genome coding sequences for the indicated strain  
+"\*.core_loci.txt": Core genome coding sequences for the indicated strain  
+_Column headers and descriptions:_  
 * locus_id: locusID of gene
 * gen_contig_id: Source strain contig ID
 * gen_contig_start: Gene start coordinate in source sequence (1-based)
