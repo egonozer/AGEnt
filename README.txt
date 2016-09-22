@@ -59,21 +59,19 @@ the "backbone.fasta" file here.
 
 ** Optional Inputs:
 
-  -a	Minimum overlap with accessory coordinates, in percent, for a
-query gene to be called accessory. (default: 50)
-
   -c	Path to file containing names and coordinates of genes in the
 query genome. This will output a file separating genes into core or
-accessory categories ("_orfs.txt").
+accessory categories.
   
-File should be in \"Glimmer\" format, i.e.
+Default file format is "Glimmer" format, i.e.
 	>contig_name_1 
 	orf_ID_1<space(s)>start_coordinate<space(s)>stop_coordinate
 	orf_ID_2<space(s)>start_coordinate<space(s)>stop_coordinate
 	>contig_name_2
 	orf_ID_3<space(s)>start_coordinate<space(s)>stop_coordinate
 	etc...
-            
+but different file formats can be chosen with option -f (see below)            
+
 Contig names should match those in file given by option -q.
 All coordinates are 1-based.
 Coordinates assuming a circular contig that cross the origin will
@@ -83,6 +81,13 @@ contig).
 If an annotated Genbank file is given as the query sequence (-q),
 gene coordinates entered here will override the Genbank file
 annotations.
+
+  -f    format of ORF coordinate file given to -c. Options are:
+            'glimmer'
+            'genemark'
+            'prodigal' ('gbk' or web format) 
+            'gff'
+        (default: glimmer)
 
   -l    Print license information and quit
 
@@ -111,44 +116,55 @@ or "G" for Genbank.
 
 OUTPUT FILES:
 
-"non-core.key.txt"
-Tab-delimited file of regions not aligning to the reference sequence
-(i.e. accessory sequences).
+- statistics.txt
+First line shows the current software version used.
+Second line shows the input parameters given to the software.
 Column descriptions:
-* id: Sequence ID of each accessory sequence. Assigned by AGEnt.
-* length: Length of the accessory sequence, in bases
-* gc%: Percent GC content of the accessory sequence
-* scaffold_parent: Name of the query sequence from which the
-accessory sequence was identified (i.e. parent sequence)
-* scaffold_parent_leng: Length of the parent sequence from the query,
-in bases
-* l_border_coord: Coordinate of the last nucleotide on the parent
-sequence 5' to the accessory sequence. Coordinates are 1-based. If
-this value is a "?", the accessory sequence includes the first base
-in the parent sequence, so the accessory border cannot be determined.
-* r_border_coord: Coordinate of the first nucleotide on the the
-parent sequence 3' to the accessory sequence. Coordinates are
-1-based. If this value is a "?", the accessory sequence includes the
-last base in the parent sequence, so the accessory border cannot be
-determined.
+* source: Indicates whether the row describes the strain's accessory or core genome
+* total_bp: Sequence size, in bases
+* gc_%: Percent GC content of the sequence
+* num_segs: Number of separate sequence segements output
+* min_seg: Smallest segment size, in bases
+* max_seg: Largest segment size, in bases
+* avg_leng: Average length of the output segments
+* median_leng: Median length of the output segments
+* num_cds (if annotation was provided): number of coding sequences present. A coding sequence is counted as present within either the core or the accessory genome if 50% or greater of the length of coding sequence is found in sequences within that genome fraction.
 
-"non-core.fasta"
-Nucleotide sequences of all identified accessory regions. Sequence
-IDs are those given under the "id" header in the non-core.key.txt
-file.
+- coords.txt
+Coordinates of genome sequences. 
+"*.accessory_coords.txt": Accessory genome sequences for the indicated strain
+"*.core_coords.txt": Core genome sequences for the indicated strain
+__Column headers and descriptions:__
+"contig_id": sequence ID of the source strain contig
+"contig_length": length, in bases, of the source strain contig
+"start": start coordinate of the genome segement on the source strain contig
+"stop": stop coordinate of the genome segment on the source strain contig
+"out_seq_id": sequence ID of the segment as found in the corresponding sequence file output by Spine 
 
-"orfs.txt" (if file in annotated Genbank format or ORF coordinates
-were provided)
-List of ORFs found within either the accessory
-(non-reference-aligning) regions or core (reference-aligning)
-regions. 
-Column descriptions:
-Column 1: Name of the parent contig
-Column 2: Name of the ORF
-Column 3: Percent of the ORF sequence present in the accessory
-(non-reference-aligning) regions of the query genome.
+- *.fasta
+Nucleotide sequences of the genome segments output by AGEnt. Original sources of the sequences can be determined by cross-referencing the sequence IDs with the cooresponding coords.txt file
+
+- loci.txt (if annotated genbank file was provided for the query genome)
+List of coding sequences found in the core genome.
+"*.accessory_loci.txt": Accessory genome coding sequences for the indicated strain
+"*.core_loci.txt": Core genome coding sequences for the indicated strain
+__Column headers and descriptions:__
+"locus_id": locusID of gene
+"gen_contig_id": Source strain contig ID
+"gen_contig_start": Gene start coordinate in source sequence (1-based)
+"gen_contig_stop": Gene stop coordinate in source sequence (1-based)
+"strand": Strand on which the gene is encoded
+"out_seq_id": Output sequence ID (corresponds to sequence IDs in corresponding sequence fasta file above)
+"out_seq_start": Gene start coordinate in output sequence (1-based)
+"out_seq_stop": Gene stop coordinate in output sequence (1-based)
+"pct_locus": Percentage of gene represented in the output sequence
+"overhangs": Number of bases of the gene missing from the end(s) of the output segment. Values are separated by a comma. First value is the number of bases missing from the 5' end of the output segement, second value is the number of bases missing from the 3' end of the output segment.
+"product": Gene product
 
 LICENSE:
+
+AGEnt
+Copyright (C) 2016 Egon A. Ozer
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by

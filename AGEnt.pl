@@ -4,7 +4,7 @@ my $version = "0.2";
 
 ##Changes from v0.1.3 to v0.2
 # Updated output file formatting to match Spine v0.2
-# Accept genemark and prodigal ORF files (in addition to glimmer)
+# Accept genemark, prodigal, and gff ORF files (in addition to glimmer)
 # Web status updates directly from AGEnt
 # Add gff coordinate input option
 
