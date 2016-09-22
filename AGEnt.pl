@@ -16,7 +16,7 @@ my $version = "0.2";
 
 my $license = "
     AGEnt.pl
-    Copyright (C) 2014 Egon A. Ozer
+    Copyright (C) 2016 Egon A. Ozer
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -51,14 +51,15 @@ PREREQUISITES:
   operating systems.
 
 REQUIRED:
-  -q    file of query sequence(s) in Fasta or Genbank format. If an annotated
-        Genbank formatted file is used, AGEnt will try to extract CDS
+  -q    file of query genome sequence(s) in Fasta or Genbank format. If an
+        annotated Genbank formatted file is used, AGEnt will try to extract CDS
         coordinates to separate genes into core and accessory groups.
             AGEnt will try to guess what type of file you have entered based on
             the suffix (Fasta if suffix is .fasta or .fa, Genbank if suffix is
             .gbk or .gb). If you would like to set this manually, use the -Q
             option (see below).
-  -r    file of reference sequence(s) in Fasta or Genbank format
+  -r    file of core genome sequence(s) in Fasta or Genbank format. Example of
+            input file would be the \"backbone.fasta\" file output by Spine.
             AGEnt will try to guess what type of file you have entered based on
             the suffix (Fasta if suffix is .fasta or .fa, Genbank if suffix is
             .gbk or .gb). If you would like to set this manually, use the -R
@@ -166,10 +167,12 @@ if ($nucpath){
     }
 }
 die "ERROR: Could not find nucmer in PATH. Make sure MUMmer is installed and executable.\n" if !$nuc_loc;
-print STDERR "nuc_loc: $nuc_loc\n";
+print STDERR "nuc_loc: $nuc_loc\n" unless $opt_w;
 
 #check that nucmer_difference is present and accessible
-die "ERROR: Perl must be installed and in your PATH.\n" unless (which("perl"));
+unless ($opt_w){
+    die "ERROR: Perl must be installed and in your PATH.\n" unless (which("perl"));
+}
 my $home_dir = abs_path($0); #get the absolute path to AGEnt.pl
 $home_dir =~ s/\/[^\/]*$//; #strip off AGEnt.pl
 die "ERROR: Can't find the required file \"nucmer_difference.pl\". Make sure it is in the \"scripts\" directory with AGEnt.pl ($home_dir/scripts) and has not been renamed.\n" unless (-e "$home_dir/scripts/nucmer_difference.pl");
@@ -201,7 +204,6 @@ if ($coords){
                         my $orfid = "$spref-$a_count";
                         $orfid = $lid if $lid;
                         print $crdout "$orfid\t$defline\t$lstart\t$lstop\t$ldir\t\n";
-                        #$o_id\t$c_id\t$o_start\t$o_stop\t$o_dir\t
                         ($lid, $lstart, $lstop, $ldir) = ("") x 4;
                     }
                     my $id = $1;
@@ -213,18 +215,12 @@ if ($coords){
                     my ($type, $start, $stop) = ($1, $3, $4);
                     my $dir = "+";
                     $dir = "-" if $2;
-                    #if (!$defline){
-                    #    print $crdout ">$first_head\n";
-                    #    $defline = $pref;
-                    #    $count = 0
-                    #}
                     $count++;
                     if ($lstart){
                         my $a_count = sprintf("%05d", $count);
                         my $orfid = "$spref-$a_count";
                         $orfid = $lid if $lid;
                         print $crdout "$orfid\t$defline\t$lstart\t$lstop\t$ldir\t\n";
-                        #$o_id\t$c_id\t$o_start\t$o_stop\t$o_dir\t
                         $lid = ("");
                     }
                     ($lstart, $lstop, $ldir) = ($start, $stop, $dir);
@@ -259,11 +255,11 @@ if ($coords){
                 my $a_count = sprintf("%05d", $count);
                 $contig =~ s/^.*\|//;
                 my $orfid = "$spref-$a_count";
-                if ($rest =~ m/ID=([^;]+)/){
+                if ($rest =~ m/ID="*([^;"]+)/){
                     $orfid = $1;
                 }
                 print $crdout "$orfid\t$contig\t$start\t$stop\t$dir\t";
-                if ($rest =~ m/product=([^;]+)/){
+                if ($rest =~ m/product="*([^;"]+)/){
                     print $crdout "$1";
                 }
                 print $crdout "\n";
@@ -351,14 +347,14 @@ my $r_source = "temp_ref.fasta";
 #read in query file
 open (my $q_in, "<$qfile") or die "ERROR: Can't open query sequence file $qfile: $!\n";
 if ($man_q eq "G"){
-    print STDERR "Processing query genbank file ...\n";
+    print STDERR "Processing query genome genbank file ...\n";
     print STDERR "<br>\n" if $opt_w;
     my $qpref = "temp_qry";
     my $status = gbk_convert($qfile, $qpref, "Q");
     die "ERROR: Query Genbank file does not contain DNA sequence. Please check file.\n" if ($status == 2);
     die "ERROR: CDS records in query file missing \"locus_tag\" tags. Please check file and visit http://vfsmspineagent.fsm.northwestern.edu/gbk_reformat.cgi for conversion tool.\n" if ($status == 3);
 } else {
-    print STDERR "Processing query fasta file ...\n";
+    print STDERR "Processing query genome fasta file ...\n";
     print STDERR "<br>\n" if $opt_w;
     open (my $q_in, "<$qfile") or die "ERROR: Can't open query sequence file $rfile: $!\n";
     open (my $q_out, ">temp_qry.fasta") or die "ERROR: Can't open temporary output file: $!\n";
@@ -378,7 +374,7 @@ my $q_source = "temp_qry.fasta";
 #Align with nucmer
 my $n_command = "$nuc_loc --maxmatch -p temp_align $r_source $q_source";
 print STDERR "<br>\n<h1>" if $opt_w;
-print STDERR "\nRunning $n_command ...\n";
+print STDERR "\nRunning Nucmer ...\n";
 print STDERR "</h1><br>\n" if $opt_w;
 my @n_result = `$n_command > /dev/null 2>&1`;
 my $error = $?;
@@ -400,7 +396,7 @@ my $return;
     local $opt_o = $pref;
     local $opt_p = $spref;
     local $opt_v = "";
-    local $opt_w = 1;
+    local $opt_w = 1 if $opt_w;
     $return = do "$home_dir/scripts/nucmer_difference.pl";
 }
 unless ($return){

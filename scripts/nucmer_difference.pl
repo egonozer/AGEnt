@@ -112,6 +112,7 @@ open (my $in, "<", $infile);
 my ($files, $head_id, $head_leng, $ref_id, $ref_leng);
 my $inref;
 print STDERR "Reading in delta file\n";
+print STDERR "<br>\n" if $opt_w;
 while (my $line = <$in>){
     chomp $line;
     if (!$files){ #takes the file paths of the reference and query sequences from the delta file header line;
@@ -275,7 +276,13 @@ if ($opt_c){
 }
 
 #Output core and accessory sequences, coordinates, and genes (if given)
+print STDERR "<br>\n" if $opt_w;
+print STDERR "Calculating accessory ...\n";
+print STDERR "<br>\n" if $opt_w;
 my $accessory_stats = post_process("accessory", \@accessory);
+print STDERR "<br>\n" if $opt_w;
+print STDERR "Calculating core ...\n";
+print STDERR "<br>\n" if $opt_w;
 my $core_stats = post_process("core", \@core);
 
 open (my $statout, ">$pref.statistics.txt") or die "ERROR: Can't open $pref.statistics.txt: $!\n";
@@ -287,7 +294,7 @@ if ($opt_w){
 print $statout " version $version\n";
 print $statout "inputs -m $minalign -s $minsize\n\n";
 print $statout "source\ttotal_bp\tgc_%\tnum_segs\tmin_seg\tmax_seg\tavg_leng\tmedian_leng";
-print $statout "\tnum_cds" if @loci_order;
+print $statout "\tnum_cds" if $opt_c;
 print $statout "\n";
 print $statout "$accessory_stats\n$core_stats\n";
 close $statout;
@@ -343,6 +350,12 @@ if ($rin){
     print STDERR "<br>\n" if $opt_w;
 }
 
+#clean up
+unlink ("temp_align.delta") if -e "temp_align.delta";
+unlink ("temp_qry.coords.txt") if -e "temp_qry.coords.txt";
+unlink ("temp_qry.fasta") if -e "temp_qry.fasta";
+unlink ("temp_ref.fasta") if -e "temp_ref.fasta";
+
 #----------------------------------------------
 sub stats{
 	my @lengths = @{$_[0]};
@@ -394,14 +407,14 @@ sub gc_content {
 }
 
 sub post_process {
-    my $type = shift;
-    my @array = @_;
+    my $type = $_[0];
+    my @array = @{$_[1]};
     
     my $fileid = "$pref.$seqpref.$type";
     my $seqid = "$seqpref\_$type\_";
     
     open (my $out_cor, ">$fileid\_coords.txt") or return "ERROR: Can't open $fileid\_coords.txt: $!\n";
-    print $out_cor "contig_id\tcontig_length\tstart\tstop\tout_seq_id\n" unless ($type eq "out" or $type eq "pan");
+    print $out_cor "contig_id\tcontig_length\tstart\tstop\tout_seq_id\n";
     open (my $out_seq, ">$fileid.fasta") or return "ERROR: Can't open $fileid.fasta: $!\n";
 
     my %loci;
@@ -574,7 +587,13 @@ sub post_process {
         if ($opt_w){
             print "<br><strong>Accessory Genome Statistics:</strong><br>\n";
         } else {
-            print "\nAccessory Genome Statistics:/n";
+            print "\nAccessory Genome Statistics:\n";
+        }
+    } else {
+        if ($opt_w){
+            print "<br><strong>Core Genome Statistics:</strong><br>\n";
+        } else {
+            print "\nCore Genome Statistics:\n";
         }
     }
     print "Number of segments >= $minsize bp: $num\n";
@@ -591,13 +610,12 @@ sub post_process {
     print "<br>\n" if $opt_w;
     print "Median segment length: $median\n";
     print "<br>\n" if $opt_w;
-    print "Mode segment length: $mode, Frequency: $mode_freq\n";
+    print "Mode segment length: $mode, Frequency: $mode_freq\n\n";
     print "<br><br>\n" if $opt_w;
     
     $stat_string = "$type\t$sum\t$gc\t$num\t$min\t$maxi\t$rounded_mean\t$median";
-    if (%loci){
+    if ($opt_c){
         $stat_string .= "\t$loci_count";
     }
-    $stat_string .= "\n";
     return($stat_string);
 }
