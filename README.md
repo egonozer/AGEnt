@@ -67,6 +67,7 @@ format of ORF coordinate file given to -c. Options are:
 - 'genemark'
 - 'prodigal' ('gbk' or web format) 
 - 'gff'
+
 (default: glimmer)
 
   `-l`  
