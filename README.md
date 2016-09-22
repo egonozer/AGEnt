@@ -69,7 +69,7 @@ format of ORF coordinate file given to -c. Options are:
 - 'gff'
 (default: glimmer)
 
- `-l`  
+  `-l`  
 Print license information and quit
 
   `-m`  
