@@ -443,7 +443,7 @@ sub post_process {
             }
             if ($lead == $b_leng){ #skip if the entire sequence was N's
                 #output coordinates
-                print $out_cor "$c_id\t$cleng\t$o_start\t$o_stop\t$out_id\n";
+                print $out_cor "$c_id\t$cleng\t$o_start\t$o_stop\n";
                 next;
             }
             (my $tail_seq) = $b_seq =~ m/([NnXx-]*$)/;
