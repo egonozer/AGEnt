@@ -1,6 +1,9 @@
 #!/usr/bin/perl
 
-my $version = "0.2";
+my $version = "0.2.1";
+
+##Changes from v0.2 to v0.2.1
+# Fixed bug in nucmer_difference.pl where first CDS on each contig was not being output
 
 ##Changes from v0.1.3 to v0.2
 # Updated output file formatting to match Spine v0.2

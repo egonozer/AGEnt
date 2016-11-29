@@ -18,7 +18,10 @@ my $license = "
     along with this program.  If not, see [http://www.gnu.org/licenses/].
 ";
 
-my $version = "0.6";
+my $version = "0.6.1";
+
+## Changes from version 0.6
+## Fixed bug where first CDS on each contig was not being output
 
 ## Changes from verion 0.5.1
 ## Updated output to match spine v0.2 style output including core sequence and annotation files that include gene products
@@ -475,43 +478,43 @@ sub post_process {
             if (@loci_order){ #first, will set a range of loci to screen so that we don't have to search the entire array each time
                 my ($start_rec, $stop_rec);
                 for my $i (reverse 1 .. $o_start){
-                    if ($loci_stops{$c_id}{$i}){
+                    if (defined $loci_stops{$c_id}{$i}){
                         $start_rec = $loci_stops{$c_id}{$i};
                         last;
                     }
                 }
-                if (!$start_rec){
+                if (!defined $start_rec){
                     for my $i (reverse 1 .. $o_start){
-                        if ($loci_starts{$c_id}{$i}){
+                        if (defined $loci_starts{$c_id}{$i}){
                             $start_rec = $loci_starts{$c_id}{$i};
                             last;
                         }
                     }
                 }
-                if (!$start_rec){
+                if (!defined $start_rec){
                     for my $i ($o_start .. $o_stop){
-                        if ($loci_starts{$c_id}{$i}){
+                        if (defined $loci_starts{$c_id}{$i}){
                             $start_rec = $loci_starts{$c_id}{$i};
                             last;
                         }
                     }
                 }
-                if ($start_rec){ #no point in looking the other way if there's no start_rec
+                if (defined $start_rec){ #no point in looking the other way if there's no start_rec
                     for my $i ($o_stop .. $cleng){
-                        if ($loci_starts{$c_id}{$i}){
+                        if (defined $loci_starts{$c_id}{$i}){
                             $stop_rec = $loci_starts{$c_id}{$i};
                             last;
                         }
                     }
-                    if (!$stop_rec){
+                    if (!defined $stop_rec){
                         for my $i (reverse $o_start .. $o_stop){
-                            if ($loci_starts{$c_id}{$i}){
+                            if (defined $loci_starts{$c_id}{$i}){
                                 $stop_rec = $loci_starts{$c_id}{$i};
                                 last;
                             }
                         }
                     }
-                    $stop_rec = $start_rec if !$stop_rec;
+                    $stop_rec = $start_rec if !defined $stop_rec;
                     @locusids = @loci_order[$start_rec .. $stop_rec];
                 }
             }
