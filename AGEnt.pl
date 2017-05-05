@@ -1,6 +1,9 @@
 #!/usr/bin/perl
 
-my $version = "0.2.1";
+my $version = "0.2.2";
+
+##Changes from v0.2.1 to v0.2.2
+# Fixed bug in nucmer_difference where error message could be produced if all-N region was encountered
 
 ##Changes from v0.2 to v0.2.1
 # Fixed bug in nucmer_difference.pl where first CDS on each contig was not being output

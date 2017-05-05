@@ -18,7 +18,10 @@ my $license = "
     along with this program.  If not, see [http://www.gnu.org/licenses/].
 ";
 
-my $version = "0.6.1";
+my $version = "0.6.2";
+
+## Changes from version 0.6.1
+## Fixed bug where error message could be produced if all-N region was encountered
 
 ## Changes from version 0.6
 ## Fixed bug where first CDS on each contig was not being output
@@ -457,7 +460,7 @@ sub post_process {
                 my $dist = length($b_seq) - ($lead + $tail);
                 if ($dist < $minsize){
                     #output coordinates
-                    print $out_cor "$c_id\t$cleng\t$o_start\t$o_stop\t$out_id\n";
+                    print $out_cor "$c_id\t$cleng\t$o_start\t$o_stop\n";
                     next;
                 }
                 $b_seq = substr($b_seq, $lead, $dist);
