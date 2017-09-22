@@ -1,6 +1,9 @@
 #!/usr/bin/perl
 
-my $version = "0.2.3";
+my $version = "0.2.4";
+
+##Changes from v0.2.3 -> v0.2.4
+## Removed File::Which dependency. Added subroutine to test for whether executable is in PATH that uses only core Perl modules
 
 ##Changes from v0.2.2 to v0.2.3
 # Fixed bug in genbank file parsing where some genes that span the end of a contig might not appear in results
@@ -25,7 +28,7 @@ my $version = "0.2.3";
 
 my $license = "
     AGEnt.pl
-    Copyright (C) 2016 Egon A. Ozer
+    Copyright (C) 2016-2017 Egon A. Ozer
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -44,7 +47,8 @@ my $license = "
 use strict;
 use warnings;
 use Cwd 'abs_path';
-use File::Which;
+use File::Basename;
+use File::Spec::Functions qw ( catfile path );
 
 $|++;
 
@@ -167,9 +171,9 @@ die ("ERROR: ORF file format (-f) must be either 'glimmer', 'genemark', 'prodiga
 $spref =~ s/^.*\///;
 
 #if path to nucmer was given, check that the executables are present
-my $nuc_loc = which("nucmer");
+my $nuc_loc = is_path("nucmer");
 if ($nucpath){
-    if (-e "$nucpath/nucmer"){
+    if (-x "$nucpath/nucmer"){
         $nuc_loc = "$nucpath/nucmer";
     } else {
         print STDERR "WARNING: Could not find nucmer at $nucpath. Searching PATH...\n";
@@ -180,7 +184,7 @@ print STDERR "nuc_loc: $nuc_loc\n" unless $opt_w;
 
 #check that nucmer_difference is present and accessible
 unless ($opt_w){
-    die "ERROR: Perl must be installed and in your PATH.\n" unless (which("perl"));
+    die "ERROR: Perl must be installed and in your PATH.\n" unless (is_path("perl"));
 }
 my $home_dir = abs_path($0); #get the absolute path to AGEnt.pl
 $home_dir =~ s/\/[^\/]*$//; #strip off AGEnt.pl
@@ -424,6 +428,23 @@ print STDERR "\nFinished!\n";
 print STDERR "</strong><br>\n" if $opt_w;
 
 #------------------------
+sub is_path {
+    ## Subroutine based on StackOverflow post by Sinan Unur (https://stackoverflow.com/a/8243770)
+    my $exe = shift;
+    my @path = path;
+    my @pathext = ( q{} );
+    if ($^O eq 'MSWin32'){
+        push @pathext, map { lc } split /;/, $ENV{PATHEXT};
+    }
+    for my $dir (@path){
+        for my $ext (@pathext){
+            my $f = catfile $dir, "$exe$ext";
+            return ($f) if -x $f;
+        }
+    }
+    return();
+}
+
 sub gbk_convert{
     my $file = shift;
     my $filepref = shift;
