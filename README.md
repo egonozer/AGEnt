@@ -29,8 +29,13 @@ File of query sequence(s) in Fasta or Genbank format. If an annotated Genbank fo
 AGEnt will try to guess what type of file you have entered based on the suffix (Fasta if suffix is .fasta or .fa, Genbank if suffix is .gbk or .gb). If you would like to set this manually, use the -Q option (see below).
 
 If a Genbank file is given, the CDS records must have "locus_id" tags for gene information to be extracted. Some automated annotation pipelines, such as RAST, do not add "locus_id" tags. These can be added to your file using the online or downloadable program
-gbk_reformat (see http://vfsmspineagent.fsm.northwestern.edu/cgi-bin/gbk_reformat.cgi
-for more information).
+gbk_reformat (see http://vfsmspineagent.fsm.northwestern.edu/cgi-bin/gbk_reformat.cgi for more information).
+
+If your genome is split across multiple files (i.e. multiple chromosomes or plasmids), you can include all files here separated by commas (no spaces). File order is not important. All files must be in the same format, i.e. all fasta or all genbank. No mixing and matching!   
+Example:
+```
+-q /path/to/chrom_I.fasta,/path/to/chrom_II.fasta,/path/to/plasmid.fasta
+```
 
   `-r`  
 File of reference sequence(s) in Fasta or Genbank format. 
@@ -64,6 +69,12 @@ All coordinates are 1-based.
 Coordinates assuming a circular contig that cross the origin will give incorrect results.  
 Best if all ORF IDs are unique (i.e. don't restart count every contig).  
 If an annotated Genbank file is given as the query sequence (-q), gene coordinates entered here will override the Genbank file annotations.
+
+If you provided multiple sequence files as query files (-q), you can also provide multiple coordinate files here, again separated by commas with no spaces. File order is not important. All files must be in the same format, i.e. all gff3 or all glimmer, etc. No mixing and matching!  
+Example:
+```
+-c /path/to/chrom_I.gff3,/path/to/chrom_II.gff3,/path/to/plasmid.gff3
+```
 
   `-f`  
 format of ORF coordinate file given to -c. Options are:

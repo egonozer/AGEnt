@@ -47,6 +47,13 @@ gbk_reformat (see
 http://vfsmspineagent.fsm.northwestern.edu/cgi-bin/gbk_reformat.cgi
 for more information).
 
+If your genome is split across multiple files (i.e. multiple chromosomes
+or plasmids), you can include all files here separated by commas (no spaces). 
+File order is not important. All files must be in the same format, i.e. all 
+fasta or all genbank. No mixing and matching!   
+Example:
+-q /path/to/chrom_I.fasta,/path/to/chrom_II.fasta,/path/to/plasmid.fasta
+
   -r    File of reference sequence(s) in Fasta or Genbank format. 
 
 AGEnt will try to guess what type of file you have entered based on
@@ -85,11 +92,18 @@ If an annotated Genbank file is given as the query sequence (-q),
 gene coordinates entered here will override the Genbank file
 annotations.
 
+If you provided multiple sequence files as query files (-q), you can also 
+provide multiple coordinate files here, again separated by commas with no 
+spaces. File order is not important. All files must be in the same format, 
+i.e. all gff3 or all glimmer, etc. No mixing and matching!  
+Example:
+-c /path/to/chrom_I.gff3,/path/to/chrom_II.gff3,/path/to/plasmid.gff3
+
   -f    format of ORF coordinate file given to -c. Options are:
             'glimmer'
             'genemark'
             'prodigal' ('gbk' or web format) 
-            'gff'
+            'gff' (accepts gff or gff3 files)
         (default: glimmer)
 
   -l    Print license information and quit
