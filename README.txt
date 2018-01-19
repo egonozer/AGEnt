@@ -8,7 +8,7 @@ information on Spine.
 
 REQUIREMENTS:
 
-- Perl 5.10 or above and File::Which module
+- Perl 5.10 or above
 - MUMmer version 3.22 or above (http://mummer.sourceforge.net).
 Install MUMmer as directed by the instructions included with the
 software.
@@ -58,6 +58,9 @@ If you want to use the core genome output produced by Spine, use
 the "backbone.fasta" file here.
 
 ** Optional Inputs:
+
+  -b	Also output core (i.e. non-accessory) sequences and coordinates.
+(default: only accessory sequences and coordinates are output)
 
   -c	Path to file containing names and coordinates of genes in the
 query genome. This will output a file separating genes into core or
@@ -133,7 +136,7 @@ Column descriptions:
 - coords.txt
 Coordinates of genome sequences. 
 "*.accessory_coords.txt": Accessory genome sequences for the indicated strain
-"*.core_coords.txt": Core genome sequences for the indicated strain
+"*.core_coords.txt": Core genome sequences for the indicated strain [optional: see -b above]
 __Column headers and descriptions:__
 "contig_id": sequence ID of the source strain contig
 "contig_length": length, in bases, of the source strain contig
@@ -147,7 +150,7 @@ Nucleotide sequences of the genome segments output by AGEnt. Original sources of
 - loci.txt (if annotated genbank file was provided for the query genome)
 List of coding sequences found in the core genome.
 "*.accessory_loci.txt": Accessory genome coding sequences for the indicated strain
-"*.core_loci.txt": Core genome coding sequences for the indicated strain
+"*.core_loci.txt": Core genome coding sequences for the indicated strain [optional: see -b above]
 __Column headers and descriptions:__
 "locus_id": locusID of gene
 "gen_contig_id": Source strain contig ID
@@ -164,7 +167,7 @@ __Column headers and descriptions:__
 LICENSE:
 
 AGEnt
-Copyright (C) 2016 Egon A. Ozer
+Copyright (C) 2016-2018 Egon A. Ozer
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by

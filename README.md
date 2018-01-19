@@ -6,7 +6,7 @@ AGEnt is a program for identifying accessory genomic elements in bacterial genom
 
 ## REQUIREMENTS:
 
-- Perl 5.10 or above and File::Which module
+- Perl 5.10 or above
 - [MUMmer](http://mummer.sourceforge.net) version 3.22 or above. Install MUMmer as directed by the instructions included with the software.
 - Mac OSX or Linux. We provide no guarantees that this will work on
 Windows or other operating systems.
@@ -41,6 +41,10 @@ If you want to use the core genome output produced by Spine, use the "backbone.f
 
 ### Optional Inputs:
 
+  `-b`  
+Also output core (i.e. non-accessory) sequences and coordinates.
+(default: only accessory sequences and coordinates are output)
+
   `-c`  
 Path to file containing names and coordinates of genes in the query genome. This will output a file separating genes into core or accessory categories.
   
@@ -66,7 +70,7 @@ format of ORF coordinate file given to -c. Options are:
 - 'glimmer'
 - 'genemark'
 - 'prodigal' ('gbk' or web format) 
-- 'gff'
+- 'gff' (accepts gff3 or gff formatted files)
 
 (default: glimmer)
 
@@ -122,7 +126,7 @@ _Column headers and descriptions:_
 __coords.txt__  
 Coordinates of genome sequences.   
 "\*.accessory_coords.txt": Accessory genome sequences for the indicated strain  
-"\*.core_coords.txt": Core genome sequences for the indicated strain  
+"\*.core_coords.txt": Core genome sequences for the indicated strain [optional: see -b above] 
 _Column headers and descriptions:_  
 * contig_id: sequence ID of the source strain contig
 * contig_length: length, in bases, of the source strain contig
@@ -133,10 +137,10 @@ _Column headers and descriptions:_
 __*.fasta__  
 Nucleotide sequences of the genome segments output by AGEnt. Original sources of the sequences can be determined by cross-referencing the sequence IDs with the cooresponding coords.txt file
 
-__loci.txt__ (if annotated genbank file was provided for the query genome)  
+__loci.txt__ (if annotated genbank file or annotation coordinate file was provided for the query genome)  
 List of coding sequences found in the core genome.  
 "\*.accessory_loci.txt": Accessory genome coding sequences for the indicated strain  
-"\*.core_loci.txt": Core genome coding sequences for the indicated strain  
+"\*.core_loci.txt": Core genome coding sequences for the indicated strain [optional: see -b above]  
 _Column headers and descriptions:_  
 * locus_id: locusID of gene
 * gen_contig_id: Source strain contig ID
@@ -153,7 +157,7 @@ _Column headers and descriptions:_
 ## LICENSE:
 
 AGEnt
-Copyright (C) 2016 Egon A. Ozer
+Copyright (C) 2016-2018 Egon A. Ozer
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by

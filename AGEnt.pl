@@ -1,9 +1,16 @@
 #!/usr/bin/perl
 
-my $version = "0.2.4";
+my $version = "0.3";
+
+##Changes from v0.2.4 -> v0.3
+# Can accept multiple files for the query genome and query genome coordinates. This is useful for multi-chromosome organisms or inclusion of plasmids.
+# Updated gff compatibility to read ensembl-formatted gff3 files
+# Made core output optional. This step can be slow and perhaps of limited value for most analyses.
+# statistics.txt file will now show the AGEnt.pl wrapper script version, not the nucmer_difference.pl version
+# make temporary file names unique so that multiple instances of AGEnt can be run in the same directory
 
 ##Changes from v0.2.3 -> v0.2.4
-## Removed File::Which dependency. Added subroutine to test for whether executable is in PATH that uses only core Perl modules
+# Removed File::Which dependency. Added subroutine to test for whether executable is in PATH that uses only core Perl modules
 
 ##Changes from v0.2.2 to v0.2.3
 # Fixed bug in genbank file parsing where some genes that span the end of a contig might not appear in results
@@ -28,7 +35,7 @@ my $version = "0.2.4";
 
 my $license = "
     AGEnt.pl
-    Copyright (C) 2016-2017 Egon A. Ozer
+    Copyright (C) 2016-2018 Egon A. Ozer
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -64,13 +71,19 @@ PREREQUISITES:
   operating systems.
 
 REQUIRED:
-  -q    file of query genome sequence(s) in Fasta or Genbank format. If an
+  -q    file(s) of query genome sequence(s) in Fasta or Genbank format. If an
         annotated Genbank formatted file is used, AGEnt will try to extract CDS
         coordinates to separate genes into core and accessory groups.
             AGEnt will try to guess what type of file you have entered based on
             the suffix (Fasta if suffix is .fasta or .fa, Genbank if suffix is
             .gbk or .gb). If you would like to set this manually, use the -Q
             option (see below).
+        ** If your genome is split into multiple files (i.e. multiple
+        chromosomes or plasmids), you can include all files here separated by
+        commas (no spaces).
+        Example:
+        -q /path/to/chrom_I.fasta,/path/to/chrom_II.fasta,/path/to/plasmid.fasta
+            
   -r    file of core genome sequence(s) in Fasta or Genbank format. Example of
             input file would be the \"backbone.fasta\" file output by Spine.
             AGEnt will try to guess what type of file you have entered based on
@@ -79,8 +92,10 @@ REQUIRED:
             option (see below).
         
 OPTIONS:
-  -c    path to file containing names and coordinates of ORFs in the query
-        genome. This will output a file separating genes into core or
+  -b    also output core (i.e. non-accessory) sequences and coordinates
+        (default: only accessory sequences and coordinates are output)
+  -c    path(s) to file(s) containing names and coordinates of ORFs in the
+        query genome. This will output a file separating genes into core or
         accessory categories (\"_loci.txt\").
         Default file format is \"Glimmer\" format, i.e.
             >contig_name_1 
@@ -97,16 +112,23 @@ OPTIONS:
         Best if all ORF IDs are unique (i.e. don't restart count
             every contig).
         
-        If entering ORF-calling results from GeneMark or Prodigal instead,
-            please indicate this with option -f
+        If entering ORF-calling results from GeneMark, Prodigal, or GFF/GFF3
+            instead, please indicate this with option -f
             
         If an annotated Genbank query file is given (-q), the gene coordinates
             entered here will override the Genbank file annotations
+            
+        ** If you provided multiple sequence files as query files (-q), you can
+            also provide multiple coordinate files here, again separated by
+            commas with no spaces
+            Example:
+            -c /path/to/chrom_I.gff3,/path/to/chrom_II.gff3,/path/to/plasmid.gff3
+        
   -f    format of ORF coordinate file given to -c. Options are:
             'glimmer'
             'genemark'
             'prodigal' ('gbk' or web format) 
-            'gff'
+            'gff' (reads gff or gff3 formats)
         (default: glimmer)
   -l    print license information and quit
   -m    minimum alignment identity between query and reference to be called
@@ -131,18 +153,14 @@ OPTIONS:
 
 # command line processing
 use Getopt::Std;
-our ($opt_q, $opt_r, $opt_a, $opt_c, $opt_l, $opt_m, $opt_n, $opt_o, $opt_p, $opt_Q, $opt_R, $opt_s, $opt_v, $opt_f, $opt_w);
-getopts('q:r:a:c:lm:n:o:p:Q:R:s:vf:w');
+our ($opt_q, $opt_r, $opt_b, $opt_c, $opt_l, $opt_m, $opt_n, $opt_o, $opt_p, $opt_Q, $opt_R, $opt_s, $opt_v, $opt_f, $opt_w);
+getopts('q:r:a:bc:lm:n:o:p:Q:R:s:vf:w');
 die "version $version\n" if $opt_v;
 die "$license\n" if $opt_l;
 die $usage unless ($opt_q and $opt_r);
 
 my $qfile   = $opt_q if $opt_q;
 my $rfile   = $opt_r if $opt_r;
-#my $minover = $opt_a ? $opt_a : 50;
-#  -a    minimum overlap with accessory coordinates, in percent, for a query
-#        gene to be called accessory
-#        (default: 50).
 my $coords  = $opt_c if $opt_c;
 my $coordf  = $opt_f ? $opt_f : "glimmer";
 my $minalgn = $opt_m ? $opt_m : 85;
@@ -167,6 +185,7 @@ if ($man_r){
     $man_r = uc(substr($man_r, 0, 1)); #take first letter of input only and make it uppercase
     die ("ERROR: Reference file type (-R) must be either \"F\" (Fasta) or \"G\" (Genbank)\n") if ($man_r =~ m/[^FG]/);
 }
+$coordf = lc($coordf);
 die ("ERROR: ORF file format (-f) must be either 'glimmer', 'genemark', 'prodigal', or 'gff'\n") unless ($coordf eq "glimmer" or $coordf eq "genemark" or $coordf eq "prodigal" or $coordf eq "gff");
 $spref =~ s/^.*\///;
 
@@ -192,118 +211,144 @@ die "ERROR: Can't find the required file \"nucmer_difference.pl\". Make sure it 
 print STDERR "home_dir = $home_dir\n" unless $opt_w;
 
 #Make sure we're not going to delete anything unintentionally
-my @temp_list = qw (temp_ref.fasta temp_qry.fasta temp_qry.coords.txt temp_align.delta);
-for my $i (0 .. $#temp_list){
-    my $file = $temp_list[$i];
-    die "ERROR: The temporary file $file already exists in this directory. Please delete, rename, or move the file before running AGEnt\n" if -e $file;
-}
+#my @temp_list = qw (temp_ref.fasta temp_qry.fasta temp_qry.coords.txt temp_align.delta);
+#for my $i (0 .. $#temp_list){
+#    my $file = $temp_list[$i];
+#    die "ERROR: The temporary file $file already exists in this directory. Please delete, rename, or move the file before running AGEnt\n" if -e $file;
+#}
+my @temp_list;
 
 #Read in coordinates file (if given)
 if ($coords){
-    open (my $cin, "<$coords") or die "ERROR: Can't open $coords: $!\n";
-    open (my $crdout, ">temp_qry.coords.txt") or die "Can't open temporary file: $!\n";
-    my $defline; #for Prodigal
-	my ($lid, $lstart, $lstop, $ldir); #for Prodigal
-	my $count = 0; #for Prodigal
-    while (my $fline = <$cin>){
-        $fline =~ s/\R/\012/g; #converts to UNIX-style line endings
-        my @lines = split("\n", $fline); #need to split lines by line-ending character in the case of Mac-formatted files which only have CR line terminators, not both CR and LF like DOS
-        while (@lines){
-            my $line = shift @lines;
-            if ($coordf eq "prodigal"){
-                if ($line =~ m/seqhdr="([^"]*)/ or $line =~ m/DEFINITION\s+>(.*)/){
-                    if ($lstart){
-                        my $a_count = sprintf("%05d", $count);
-                        my $orfid = "$spref-$a_count";
-                        $orfid = $lid if $lid;
-                        print $crdout "$orfid\t$defline\t$lstart\t$lstop\t$ldir\t\n";
-                        ($lid, $lstart, $lstop, $ldir) = ("") x 4;
+    my @cfiles = split(",", $coords);
+    open (my $crdout, ">temp_$pref\_$spref\_qry.coords.txt") or die "Can't open temporary file: $!\n";
+    push @temp_list, "temp_$pref\_$spref\_qry.coords.txt";
+    my $count = 0;
+    foreach my $cfile (@cfiles){
+        open (my $cin, "<$cfile") or die "ERROR: Can't open $cfile: $!\n";
+        my $defline; #for Prodigal
+        my ($lid, $lstart, $lstop, $ldir, $lprod); #for Prodigal & Ensembl gff
+        while (my $fline = <$cin>){
+            $fline =~ s/\R/\012/g; #converts to UNIX-style line endings
+            my @lines = split("\n", $fline); #need to split lines by line-ending character in the case of Mac-formatted files which only have CR line terminators, not both CR and LF like DOS
+            while (@lines){
+                my $line = shift @lines;
+                if ($coordf eq "prodigal"){
+                    if ($line =~ m/seqhdr="([^"]*)/ or $line =~ m/DEFINITION\s+>(.*)/){
+                        if ($lstart){
+                            my $a_count = sprintf("%05d", $count);
+                            my $orfid = "$spref-$a_count";
+                            $orfid = $lid if $lid;
+                            print $crdout "$orfid\t$defline\t$lstart\t$lstop\t$ldir\t\n";
+                            ($lid, $lstart, $lstop, $ldir) = ("") x 4;
+                        }
+                        my $id = $1;
+                        $id =~ s/\s.*$//g;
+                        $defline = $id;
+                        next;
                     }
-                    my $id = $1;
-                    $id =~ s/\s.*$//g;
-                    $defline = $id;
-                    next;
-                }
-                if ($line =~ m/^\s+(\S+)\s+(complement\()*<*(\d+)<*\.\.>*(\d+)>*\)*\s*$/){
-                    my ($type, $start, $stop) = ($1, $3, $4);
-                    my $dir = "+";
-                    $dir = "-" if $2;
+                    if ($line =~ m/^\s+(\S+)\s+(complement\()*<*(\d+)<*\.\.>*(\d+)>*\)*\s*$/){
+                        my ($type, $start, $stop) = ($1, $3, $4);
+                        my $dir = "+";
+                        $dir = "-" if $2;
+                        $count++;
+                        if ($lstart){
+                            my $a_count = sprintf("%05d", $count);
+                            my $orfid = "$spref-$a_count";
+                            $orfid = $lid if $lid;
+                            print $crdout "$orfid\t$defline\t$lstart\t$lstop\t$ldir\t\n";
+                            $lid = ("");
+                        }
+                        ($lstart, $lstop, $ldir) = ($start, $stop, $dir);
+                        next;
+                    }
+                    if ($line =~ m/^\s*\/note="ID=([^;]+)/){
+                        $lid = $1;
+                        next;
+                    }
+                } elsif ($coordf eq "genemark"){
+                    $line =~ s/^\s*//; #removes any spaces at the beginning of the line
+                    $line =~ s/\s*$//; #removes any spaces at the end of the line
+                    if ($line =~ m/FASTA definition line: (.*)/){
+                        $defline = $1;
+                        $defline =~ s/\s.*$//;
+                        next;
+                    }
+                    if ($line =~ m/^\s*\d/){
+                        my ($id, $strand, $start, $stop, $x1, $x2) = split(' ', $line);
+                        $id = sprintf("%05d", $id);
+                        $start =~ s/[<>]//;
+                        $stop =~ s/[<>]//;
+                        my $out1 = "$spref-$id";
+                        $count++;
+                        print $crdout "$out1\t$defline\t$start\t$stop\t$strand\t\n";
+                    }
+                } elsif ($coordf eq "gff"){
+                    next if $line =~ m/^#/;
+                    next if $line =~ m/^\s*$/;
+                    my ($contig, $x1, $type, $start, $stop, $x2, $dir, $x3, $rest) = split("\t", $line);
+                    if ($type eq "gene"){ # in Ensembl gff3 files, records corresponding to locus_id and product in gbk files are found in the gene record, not the CDS record
+                        ($lstart, $lstop) = ($start, $stop);
+                        if ($rest =~ m/gene_id="*([^;"]+)/){
+                            $lid = $1;
+                        }
+                        if ($rest =~ m/description="*([^;"]+)/){
+                            $lprod = $1;
+                        }
+                    }
+                    next unless $type eq "CDS";
                     $count++;
-                    if ($lstart){
-                        my $a_count = sprintf("%05d", $count);
-                        my $orfid = "$spref-$a_count";
-                        $orfid = $lid if $lid;
-                        print $crdout "$orfid\t$defline\t$lstart\t$lstop\t$ldir\t\n";
-                        $lid = ("");
+                    my $a_count = sprintf("%05d", $count);
+                    $contig =~ s/^.*\|//;
+                    my $orfid = "$spref-$a_count";
+                    if ($rest =~ m/ID="*([^;"]+)/){
+                        $orfid = $1;
                     }
-                    ($lstart, $lstop, $ldir) = ($start, $stop, $dir);
-                    next;
+                    if ($lid and $lstart == $start and $lstop == $stop){
+                        $orfid = $lid;
+                    }
+                    print $crdout "$orfid\t$contig\t$start\t$stop\t$dir\t";
+                    my $product;
+                    if ($rest =~ m/product="*([^;"]+)/){
+                        $product = $1;
+                    }
+                    if ($lprod and $lstart == $start and $lstop == $stop){
+                        $product = $lprod;
+                    }
+                    print $crdout "$product" if $product;
+                    print $crdout "\n";
+                } else { #Glimmer
+                    if ($line =~ m/^>\s*(\S+)/){
+                        $defline = $1;
+                        next;
+                    }
+                    next if $line =~ m/^\s*$/; #skip blank lines
+                    my @tmp = split(' ', $line);
+                    my ($orf, $start, $stop) = @tmp;
+                    my $out1 = "$spref-$orf";
+                    my $dir = "+";
+                    if ($start > $stop){
+                        $dir = "-";
+                        ($start, $stop) = ($stop, $start);
+                    }
+                    print $crdout "$out1\t$defline\t$start\t$stop\t$dir\t\n";
                 }
-                if ($line =~ m/^\s*\/note="ID=([^;]+)/){
-                    $lid = $1;
-                    next;
-                }
-            } elsif ($coordf eq "genemark"){
-                $line =~ s/^\s*//; #removes any spaces at the beginning of the line
-                $line =~ s/\s*$//; #removes any spaces at the end of the line
-                if ($line =~ m/FASTA definition line: (.*)/){
-                    $defline = $1;
-                    $defline =~ s/\s.*$//;
-                    next;
-                }
-                if ($line =~ m/^\s*\d/){
-                    my ($id, $strand, $start, $stop, $x1, $x2) = split(' ', $line);
-                    $id = sprintf("%05d", $id);
-                    $start =~ s/[<>]//;
-                    $stop =~ s/[<>]//;
-                    my $out1 = "$spref-$id";
-                    print $crdout "$out1\t$defline\t$start\t$stop\t$strand\t\n";
-                }
-            } elsif ($coordf eq "gff"){
-                next if $line =~ m/^#/;
-                next if $line =~ m/^\s*$/;
-                my ($contig, $x1, $type, $start, $stop, $x2, $dir, $x3, $rest) = split("\t", $line);
-                next unless $type eq "CDS";
-                $count++;
-                my $a_count = sprintf("%05d", $count);
-                $contig =~ s/^.*\|//;
-                my $orfid = "$spref-$a_count";
-                if ($rest =~ m/ID="*([^;"]+)/){
-                    $orfid = $1;
-                }
-                print $crdout "$orfid\t$contig\t$start\t$stop\t$dir\t";
-                if ($rest =~ m/product="*([^;"]+)/){
-                    print $crdout "$1";
-                }
-                print $crdout "\n";
-            } else { #Glimmer
-                if ($line =~ m/^>\s*(\S+)/){
-                    $defline = $1;
-                    next;
-                }
-                next if $line =~ m/^\s*$/; #skip blank lines
-                my @tmp = split(' ', $line);
-                my ($orf, $start, $stop) = @tmp;
-                my $out1 = "$spref-$orf";
-                my $dir = "+";
-                if ($start > $stop){
-                    $dir = "-";
-                    ($start, $stop) = ($stop, $start);
-                }
-                print $crdout "$out1\t$defline\t$start\t$stop\t$dir\t\n";
             }
         }
-    }
-    if ($coordf eq "prodigal"){
-        if ($lstart){
-            my $a_count = sprintf("%05d", $count);
-            my $orfid = "$spref-$a_count";
-            $orfid = $lid if $lid;
-            print $crdout "$orfid\t$defline\t$lstart\t$lstop\t$ldir\t\n";
+        if ($coordf eq "prodigal"){
+            if ($lstart){
+                my $a_count = sprintf("%05d", $count);
+                my $orfid = "$spref-$a_count";
+                $orfid = $lid if $lid;
+                print $crdout "$orfid\t$defline\t$lstart\t$lstop\t$ldir\t\n";
+            }
         }
+        close ($cfile);
     }
-    close $coords;
-    $coords = "temp_qry.coords.txt";
+    close ($crdout);
+    print STDERR "Read in $count total annotation records from coordinate file(s)\n";
+    print STDERR "<br>\n" if $opt_w;
+    $coords = "temp_$pref\_$spref\_qry.coords.txt";
 }
 
 #check input sequence file types (trying to be flexible)
@@ -318,11 +363,17 @@ my %types = (
     GENBANK => 1
 );
 if (!$man_q){
-    (my $suffix) = $qfile =~ m/\.([^.]+)$/;
-    die ("ERROR: Cannot determine query file type. No suffix found. Please set -Q with sequence file type\n") if (!$suffix);
-    my $usuffix = uc($suffix);
-    die ("ERROR: Query file suffix ($suffix) not recognized, cannot determine file type. Please set -Q with sequence file type\n") if (!$types{$usuffix});
-    $man_q = substr($usuffix, 0, 1);
+    my @qfiles = split(",",$qfile);
+    foreach my $qf (@qfiles){
+        (my $suffix) = $qf =~ m/\.([^.]+)$/;
+        die ("ERROR: Cannot determine query file type for '$qf'. No suffix found. Please set -Q with sequence file type\n") if (!$suffix);
+        my $usuffix = uc($suffix);
+        die ("ERROR: Query file '$qf' suffix ($suffix) not recognized, cannot determine file type. Please set -Q with sequence file type\n") if (!$types{$usuffix});
+        if ($man_q){
+            die("ERROR: All query files must be of the same type (fasta or genbank)\n") if $man_q ne substr($usuffix, 0, 1);
+        }
+        $man_q = substr($usuffix, 0, 1);
+    }
 }
 if (!$man_r){
     (my $suffix) = $rfile =~ m/\.([^.]+)$/;
@@ -333,17 +384,18 @@ if (!$man_r){
 }
 
 #read in reference file
+push @temp_list, "temp_$pref\_$spref\_ref.fasta";
 if ($man_r eq "G"){
     print STDERR "Processing reference genbank file ...\n";
     print STDERR "<br>\n" if $opt_w;
-    my $rpref = "temp_ref";
+    my $rpref = "temp_$pref\_$spref\_ref";
     my $status = gbk_convert($rfile, $rpref, "R");
     die "ERROR: Reference Genbank file does not contain DNA sequence. Please check file.\n" if ($status == 2);
 } else {
     print STDERR "Processing reference fasta file ...\n";
     print STDERR "<br>\n" if $opt_w;
     open (my $r_in, "<$rfile") or die "ERROR: Can't open reference sequence file $rfile: $!\n";
-    open (my $r_out, ">temp_ref.fasta") or die "ERROR: Can't open temporary output file: $!\n";
+    open (my $r_out, ">temp_$pref\_$spref\_ref.fasta") or die "ERROR: Can't open temporary output file: $!\n";
     while (my $fline = <$r_in>){
         $fline =~ s/\R/\012/g; #converts to UNIX-style line endings
         my @lines = split("\n", $fline); #need to split lines by line-ending character in the case of Mac-formatted files which only have CR line terminators, not both CR and LF like DOS
@@ -355,37 +407,40 @@ if ($man_r eq "G"){
     close ($r_in);
     close ($r_out);
 }
-my $r_source = "temp_ref.fasta";
+my $r_source = "temp_$pref\_$spref\_ref.fasta";
 
-#read in query file
-open (my $q_in, "<$qfile") or die "ERROR: Can't open query sequence file $qfile: $!\n";
-if ($man_q eq "G"){
-    print STDERR "Processing query genome genbank file ...\n";
-    print STDERR "<br>\n" if $opt_w;
-    my $qpref = "temp_qry";
-    my $status = gbk_convert($qfile, $qpref, "Q");
-    die "ERROR: Query Genbank file does not contain DNA sequence. Please check file.\n" if ($status == 2);
-    die "ERROR: CDS records in query file missing \"locus_tag\" tags. Please check file and visit http://vfsmspineagent.fsm.northwestern.edu/gbk_reformat.cgi for conversion tool.\n" if ($status == 3);
-} else {
-    print STDERR "Processing query genome fasta file ...\n";
-    print STDERR "<br>\n" if $opt_w;
-    open (my $q_in, "<$qfile") or die "ERROR: Can't open query sequence file $rfile: $!\n";
-    open (my $q_out, ">temp_qry.fasta") or die "ERROR: Can't open temporary output file: $!\n";
-    while (my $fline = <$q_in>){
-        $fline =~ s/\R/\012/g; #converts to UNIX-style line endings
-        my @lines = split("\n", $fline); #need to split lines by line-ending character in the case of Mac-formatted files which only have CR line terminators, not both CR and LF like DOS
-        while (@lines){
-            my $line = shift @lines;
-            print $q_out "$line\n";
+#read in query file(s)
+push @temp_list, "temp_$pref\_$spref\_qry.fasta";
+my @qfiles = split(",", $qfile);
+foreach my $qf (@qfiles){
+    if ($man_q eq "G"){
+        print STDERR "Processing query genome genbank file ...\n";
+        print STDERR "<br>\n" if $opt_w;
+        my $status = gbk_convert($qf, "temp_$pref\_$spref\_qry", "Q");
+        die "ERROR: Query Genbank file does not contain DNA sequence. Please check file.\n" if ($status == 2);
+        die "ERROR: CDS records in query file missing \"locus_tag\" tags. Please check file and visit http://vfsmspineagent.fsm.northwestern.edu/gbk_reformat.cgi for conversion tool.\n" if ($status == 3);
+    } else {
+        print STDERR "Processing query genome fasta file ...\n";
+        print STDERR "<br>\n" if $opt_w;
+        open (my $q_in, "<$qf") or die "ERROR: Can't open query sequence file $qf: $!\n";
+        open (my $q_out, ">>temp_$pref\_$spref\_qry.fasta") or die "ERROR: Can't open temporary output file: $!\n";
+        while (my $fline = <$q_in>){
+            $fline =~ s/\R/\012/g; #converts to UNIX-style line endings
+            my @lines = split("\n", $fline); #need to split lines by line-ending character in the case of Mac-formatted files which only have CR line terminators, not both CR and LF like DOS
+            while (@lines){
+                my $line = shift @lines;
+                print $q_out "$line\n";
+            }
         }
+        close ($q_in);
+        close ($q_out);
     }
-    close ($q_in);
-    close ($q_out);
 }
-my $q_source = "temp_qry.fasta";
+my $q_source = "temp_$pref\_$spref\_qry.fasta";
 
 #Align with nucmer
-my $n_command = "$nuc_loc --maxmatch -p temp_align $r_source $q_source";
+push @temp_list, "temp_$pref\_$spref\_align.delta";
+my $n_command = "$nuc_loc --maxmatch -p temp_$pref\_$spref\_align $r_source $q_source";
 print STDERR "<br>\n<h1>" if $opt_w;
 print STDERR "\nRunning Nucmer ...\n";
 print STDERR "</h1><br>\n" if $opt_w;
@@ -399,17 +454,19 @@ print STDERR "Running nucmer_difference ...\n";
 print STDERR "</h1><br>\n" if $opt_w;
 my $return;
 {
-    our ($opt_d);
-    local $opt_d = "temp_align.delta";
+    our ($opt_d, $opt_V);
+    local $opt_d = "temp_$pref\_$spref\_align.delta";
     local $opt_m = $minalgn;
     local $opt_s = $minsize;
     local $opt_q = $q_source;
     local $opt_c = $coords if $coords;
-    #local $opt_a = $minover;
     local $opt_o = $pref;
     local $opt_p = $spref;
     local $opt_v = "";
     local $opt_w = 1 if $opt_w;
+    $opt_r = "";
+    local $opt_r = 1 if $opt_b;
+    local $opt_V = $version;
     $return = do "$home_dir/scripts/nucmer_difference.pl";
 }
 unless ($return){
@@ -449,10 +506,10 @@ sub gbk_convert{
     my $file = shift;
     my $filepref = shift;
     my $filetype = shift;
-    open (my $seqout, ">$filepref.fasta") or die "Can't open temporary file: $!\n";
+    open (my $seqout, ">>$filepref.fasta") or die "Can't open temporary file: $!\n";
     my $crdout;
     if ($filetype eq "Q"){
-        open ($crdout, ">$filepref.coords.txt") or die "Can't open temporary file: $!\n";
+        open ($crdout, ">>$filepref.coords.txt") or die "Can't open temporary file: $!\n";
     }
     my $crdstring;
     open (my $gbkin, "<", $file) or die "ERROR: Can't open $file: $!\n";
@@ -587,6 +644,7 @@ sub gbk_convert{
     if ($filetype eq "Q" and !$coords){
         if ($loccount > 0){
             $coords = "$filepref.coords.txt";
+            push @temp_list, "$filepref.coords.txt";
         } else { #if no CDS records and/or no locus_ids were found in the genbank file
             if ($opt_w){
                 print STDERR "<strong>****</strong><br>\n";

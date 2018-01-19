@@ -2,7 +2,7 @@
 
 my $license = "
     nucmer_difference.pl
-    Copyright (C) 2016 Egon A. Ozer
+    Copyright (C) 2016-2018 Egon A. Ozer
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -18,7 +18,11 @@ my $license = "
     along with this program.  If not, see [http://www.gnu.org/licenses/].
 ";
 
-my $version = "0.6.2";
+my $version = "0.6.3";
+
+## Changes from version 0.6.2
+## Made core output optional. This step can be slow and perhaps of limited value for most analyses.
+## Change name of statistics file to include sequence prefix (-p)
 
 ## Changes from version 0.6.1
 ## Fixed bug where error message could be produced if all-N region was encountered
@@ -86,6 +90,8 @@ optional:
                 all coordinates are 1-based
                 coordinates assuming a circular contig that cross the origin will
                     give incorrect results
+    -r      generate core genome (i.e. non-accessory) coordinates and sequences
+            (default: only accessory genome is output)
     -o      prefix for output files (default: \"out\")
     -p      sequence prefix (default: same as given by option -o)
     -v      verbose output
@@ -94,8 +100,8 @@ optional:
 
 ## command line processing.
 use Getopt::Std;
-use vars qw( $opt_d $opt_q $opt_o $opt_m $opt_c $opt_a $opt_s $opt_p $opt_v $opt_w );
-getopts('d:q:o:m:s:p:c:a:vw');
+use vars qw( $opt_d $opt_q $opt_o $opt_m $opt_c $opt_a $opt_s $opt_p $opt_v $opt_w $opt_r $opt_V);
+getopts('d:q:o:m:s:p:c:a:vwrV:');
 die $usage unless ($opt_d);
 
 my ($infile, $inquery, $minalign, $minsize, $pref, $seqpref, $coord, $minacc);
@@ -286,23 +292,28 @@ print STDERR "<br>\n" if $opt_w;
 print STDERR "Calculating accessory ...\n";
 print STDERR "<br>\n" if $opt_w;
 my $accessory_stats = post_process("accessory", \@accessory);
-print STDERR "<br>\n" if $opt_w;
-print STDERR "Calculating core ...\n";
-print STDERR "<br>\n" if $opt_w;
-my $core_stats = post_process("core", \@core);
+my $core_stats;
+if ($opt_r){
+    print STDERR "<br>\n" if $opt_w;
+    print STDERR "Calculating core ...\n";
+    print STDERR "<br>\n" if $opt_w;
+    $core_stats = post_process("core", \@core);
+}
 
-open (my $statout, ">$pref.statistics.txt") or die "ERROR: Can't open $pref.statistics.txt: $!\n";
+open (my $statout, ">$pref.$seqpref.statistics.txt") or die "ERROR: Can't open $pref.$seqpref.statistics.txt: $!\n";
 if ($opt_w){
     print $statout "AGEnt";
 } else {
     print $statout "$0";
 }
+$version = $opt_V if $opt_V; # get AGEnt wrapper version, not nucmer_difference version.
 print $statout " version $version\n";
 print $statout "inputs -m $minalign -s $minsize\n\n";
 print $statout "source\ttotal_bp\tgc_%\tnum_segs\tmin_seg\tmax_seg\tavg_leng\tmedian_leng";
 print $statout "\tnum_cds" if $opt_c;
 print $statout "\n";
-print $statout "$accessory_stats\n$core_stats\n";
+print $statout "$accessory_stats\n";
+print $statout "$core_stats\n" if $opt_r;
 close $statout;
 
 # Determine how much of the reference sequence aligned to the query (mostly for the sake of curiosity?)
@@ -356,11 +367,7 @@ if ($rin){
     print STDERR "<br>\n" if $opt_w;
 }
 
-#clean up
-unlink ("temp_align.delta") if -e "temp_align.delta";
-unlink ("temp_qry.coords.txt") if -e "temp_qry.coords.txt";
-unlink ("temp_qry.fasta") if -e "temp_qry.fasta";
-unlink ("temp_ref.fasta") if -e "temp_ref.fasta";
+print STDERR "\n"; #Not sure why, but this is necessary for AGEnt to capture a successful run. Weird.
 
 #----------------------------------------------
 sub stats{
