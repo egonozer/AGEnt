@@ -1,6 +1,10 @@
 #!/usr/bin/perl
 
-my $version = "0.3";
+my $version = "0.3.1";
+
+##Changes from v0.3 -> v0.3.1
+# Improved gff/gff3 file processing
+# Improved genbank file processing. Now can accept genbank files where locus_ids are in the gene records, but not in the CDS records.
 
 ##Changes from v0.2.4 -> v0.3
 # Can accept multiple files for the query genome and query genome coordinates. This is useful for multi-chromosome organisms or inclusion of plasmids.
@@ -227,7 +231,10 @@ if ($coords){
     foreach my $cfile (@cfiles){
         open (my $cin, "<$cfile") or die "ERROR: Can't open $cfile: $!\n";
         my $defline; #for Prodigal
-        my ($lid, $lstart, $lstop, $ldir, $lprod); #for Prodigal & Ensembl gff
+        my %crecs; #crecs{contig}{start}{stop}{dir}: [0]is_cds,[1]locus_id,[2]product
+        my %ctg_order;
+        my $ctg_num = 0;
+        my ($lstart, $lstop, $ldir, $lid);
         while (my $fline = <$cin>){
             $fline =~ s/\R/\012/g; #converts to UNIX-style line endings
             my @lines = split("\n", $fline); #need to split lines by line-ending character in the case of Mac-formatted files which only have CR line terminators, not both CR and LF like DOS
@@ -239,11 +246,14 @@ if ($coords){
                             my $a_count = sprintf("%05d", $count);
                             my $orfid = "$spref-$a_count";
                             $orfid = $lid if $lid;
-                            print $crdout "$orfid\t$defline\t$lstart\t$lstop\t$ldir\t\n";
+                            @{$crecs{$defline}{$lstart}{$lstop}{$ldir}} = (1, $orfid);
                             ($lid, $lstart, $lstop, $ldir) = ("") x 4;
                         }
                         my $id = $1;
                         $id =~ s/\s.*$//g;
+                        die "ERROR: Sequence ID '$defline' is used more than once in the annotation file\n" if $ctg_order{$defline};
+                        $ctg_num++;
+                        $ctg_order{$defline} = $ctg_num;
                         $defline = $id;
                         next;
                     }
@@ -256,7 +266,7 @@ if ($coords){
                             my $a_count = sprintf("%05d", $count);
                             my $orfid = "$spref-$a_count";
                             $orfid = $lid if $lid;
-                            print $crdout "$orfid\t$defline\t$lstart\t$lstop\t$ldir\t\n";
+                            @{$crecs{$defline}{$lstart}{$lstop}{$ldir}} = (1, $orfid);
                             $lid = ("");
                         }
                         ($lstart, $lstop, $ldir) = ($start, $stop, $dir);
@@ -272,6 +282,9 @@ if ($coords){
                     if ($line =~ m/FASTA definition line: (.*)/){
                         $defline = $1;
                         $defline =~ s/\s.*$//;
+                        die "ERROR: Sequence ID '$defline' is used more than once in the annotation file\n" if $ctg_order{$defline};
+                        $ctg_num++;
+                        $ctg_order{$defline} = $ctg_num;
                         next;
                     }
                     if ($line =~ m/^\s*\d/){
@@ -281,48 +294,59 @@ if ($coords){
                         $stop =~ s/[<>]//;
                         my $out1 = "$spref-$id";
                         $count++;
-                        print $crdout "$out1\t$defline\t$start\t$stop\t$strand\t\n";
+                        @{$crecs{$defline}{$start}{$stop}{$strand}} = (1, $out1);
                     }
                 } elsif ($coordf eq "gff"){
+                    ## gff is tough because there seems to be very little standardization of tags for locus IDs and gene products
+                    ## Need to try to set some priorities. 
                     next if $line =~ m/^#/;
                     next if $line =~ m/^\s*$/;
                     my ($contig, $x1, $type, $start, $stop, $x2, $dir, $x3, $rest) = split("\t", $line);
+                    unless ($ctg_order{$contig}){
+                        $ctg_num++;
+                        $ctg_order{$contig} = $ctg_num;
+                    }
+                    unless ($crecs{$contig}{$start}{$stop}{$dir}){
+                        @{$crecs{$contig}{$start}{$stop}{$dir}} = (0); #initialize the record as non-cds
+                    }
                     if ($type eq "gene"){ # in Ensembl gff3 files, records corresponding to locus_id and product in gbk files are found in the gene record, not the CDS record
-                        ($lstart, $lstop) = ($start, $stop);
-                        if ($rest =~ m/gene_id="*([^;"]+)/){
-                            $lid = $1;
+                        if ($rest =~ m/(?:\A|;)gene_id="*([^;"]+)/){
+                            ${$crecs{$contig}{$start}{$stop}{$dir}}[1] = $1;
                         }
-                        if ($rest =~ m/description="*([^;"]+)/){
-                            $lprod = $1;
+                        if ($rest =~ m/(?:\A|;)description="*([^;"]+)/){
+                            ${$crecs{$contig}{$start}{$stop}{$dir}}[2] = $1;
                         }
                     }
                     next unless $type eq "CDS";
                     $count++;
-                    my $a_count = sprintf("%05d", $count);
-                    $contig =~ s/^.*\|//;
-                    my $orfid = "$spref-$a_count";
-                    if ($rest =~ m/ID="*([^;"]+)/){
-                        $orfid = $1;
+                    ${$crecs{$contig}{$start}{$stop}{$dir}}[0] = 1;
+                    #if the CDS record has "locus" or "name" records, will use these as the locus id and product names
+                    if ($rest =~ m/(?:\A|;)locus="*([^;"]+)/){
+                        ${$crecs{$contig}{$start}{$stop}{$dir}}[1] = $1;
                     }
-                    if ($lid and $lstart == $start and $lstop == $stop){
-                        $orfid = $lid;
+                    if ($rest =~ m/(?:\A|;)name="*([^;"]+)/){
+                        ${$crecs{$contig}{$start}{$stop}{$dir}}[2] = $1;
                     }
-                    print $crdout "$orfid\t$contig\t$start\t$stop\t$dir\t";
-                    my $product;
-                    if ($rest =~ m/product="*([^;"]+)/){
-                        $product = $1;
+                    #assign a locus ID if none was found
+                    unless (${$crecs{$contig}{$start}{$stop}{$dir}}[1]){
+                        my $a_count = sprintf("%05d", $count);
+                        $contig =~ s/^.*\|//;
+                        my $orfid = "$spref-$a_count";
+                        if ($rest =~ m/(?:\A|;)ID="*([^;"]+)/){
+                            $orfid = $1;
+                        }
+                        ${$crecs{$contig}{$start}{$stop}{$dir}}[1] = $orfid;
                     }
-                    if ($lprod and $lstart == $start and $lstop == $stop){
-                        $product = $lprod;
-                    }
-                    print $crdout "$product" if $product;
-                    print $crdout "\n";
                 } else { #Glimmer
                     if ($line =~ m/^>\s*(\S+)/){
                         $defline = $1;
+                        die "ERROR: Sequence ID '$defline' is used more than once in the annotation file\n" if $ctg_order{$defline};
+                        $ctg_num++;
+                        $ctg_order{$defline} = $ctg_num;
                         next;
                     }
                     next if $line =~ m/^\s*$/; #skip blank lines
+                    $count++;
                     my @tmp = split(' ', $line);
                     my ($orf, $start, $stop) = @tmp;
                     my $out1 = "$spref-$orf";
@@ -331,7 +355,7 @@ if ($coords){
                         $dir = "-";
                         ($start, $stop) = ($stop, $start);
                     }
-                    print $crdout "$out1\t$defline\t$start\t$stop\t$dir\t\n";
+                    @{$crecs{$defline}{$start}{$stop}{$dir}} = (1, $out1);
                 }
             }
         }
@@ -340,10 +364,26 @@ if ($coords){
                 my $a_count = sprintf("%05d", $count);
                 my $orfid = "$spref-$a_count";
                 $orfid = $lid if $lid;
-                print $crdout "$orfid\t$defline\t$lstart\t$lstop\t$ldir\t\n";
+                @{$crecs{$defline}{$lstart}{$lstop}{$ldir}} = (1, $orfid);
             }
         }
         close ($cfile);
+        #print to crdout
+        foreach my $cid (sort{$ctg_order{$a} <=> $ctg_order{$b}} keys %ctg_order){
+            foreach my $start (sort{$a <=> $b} keys %{$crecs{$cid}}){
+                foreach my $stop (sort{$a <=> $b} keys %{$crecs{$cid}{$start}}){
+                    foreach my $dir (sort keys %{$crecs{$cid}{$start}{$stop}}){
+                        my ($is_cds, $lid, $prod) = @{$crecs{$cid}{$start}{$stop}{$dir}};
+                        if ($is_cds){
+                            print $crdout "$lid\t$cid\t$start\t$stop\t$dir\t";
+                            print $crdout "$prod" if $prod;
+                            print $crdout "\n";
+                        }
+                    }
+                }
+            }
+        }
+        
     }
     close ($crdout);
     print STDERR "Read in $count total annotation records from coordinate file(s)\n";
@@ -506,145 +546,161 @@ sub gbk_convert{
     my $file = shift;
     my $filepref = shift;
     my $filetype = shift;
-    open (my $seqout, ">>$filepref.fasta") or die "Can't open temporary file: $!\n";
-    my $crdout;
-    if ($filetype eq "Q"){
-        open ($crdout, ">>$filepref.coords.txt") or die "Can't open temporary file: $!\n";
-    }
-    my $crdstring;
     open (my $gbkin, "<", $file) or die "ERROR: Can't open $file: $!\n";
-    my (@list);
-    #my @seqlist;
+    open (my $seqout, ">>$filepref.fasta") or die "Can't open temporary file: $!\n";
     my $loccount = 0;
     my $seqcount = 0;
     my ($c_id, $c_seq);
-    my ($start, $stop);
-    my $is_origin;
-    my $is_feature;
-    my ($is_cds, $is_prod);
-    my %tags;
+    my $is_prod;
+    my @tags;
+    my %crecs;
+    my @ctg_order;
+    my $reading = 1; # 1 = front material, 2 = annotations, 3 = sequence
+    
     while (my $fline = <$gbkin>){
         $fline =~ s/\R/\012/g; #converts to UNIX-style line endings
         my @lines = split("\n", $fline); #need to split lines by line-ending character in the case of Mac-formatted files which only have CR line terminators, not both CR and LF like DOS
         while (@lines){
             my $line = shift @lines;
-            if ($line =~ m/^LOCUS\s+([^\s]+)/){
-                $is_origin = "";
-                if ($c_id){ #error if there is no sequence in the genbank file
-                    if (!$c_seq) {
+            next if $line =~ m/^\s*$/;
+            if ($line =~ m/^LOCUS\s+\S*\s+\d+\sbp/){
+                if ($reading == 2){ #no ORIGIN sequence record was found between LOCUS records
+                    close ($seqout);
+                    unlink ("$filepref.fasta");
+                    return (2);
+                }
+                if ($reading == 3){
+                    if ($c_seq and $c_id){
+                        print $seqout ">$c_id\n$c_seq\n";
+                        $c_seq = "";
+                        $reading = 1;
+                    } else {
                         close ($seqout);
                         unlink ("$filepref.fasta");
                         return (2);
                     }
+                }
+            }
+            if ($line =~ m/^\/\//){ #reached the end of the file (or record)
+                if ($c_seq and $c_id){
                     print $seqout ">$c_id\n$c_seq\n";
                     $c_seq = "";
-                }
-                $seqcount++;
-                if ($line =~ m/^LOCUS\s+(\S+)\s+\d+ bp/){
-                    $c_id = $1;
+                    $reading = 1;
                 } else {
-                    $c_id = "rec$seqcount";
+                    close ($seqout);
+                    unlink ("$filepref.fasta");
+                    return (2);
                 }
-                next;
             }
-            if ($line =~ m/^FEATURES\s+Location\/Qualifiers/){
-                $is_feature = 1;
-                next;
-            }
-            next unless $is_feature;
-            
-            if ($line =~ m/^\s+(\S+)\s+(complement\()*<*(\d+)<*\.\.>*(\d+)>*\)*\s*$/){
-                my ($type, $start, $stop) = ($1, $3, $4);
-                my $dir = "+";
-                $dir = "-" if $2;
-                if (%tags and $filetype eq "Q"){
-                    return(3) unless $tags{'locus_tag'}; #no locus_tag was present on the last record
-                    my ($o_id, $o_start, $o_stop, $o_dir) = ($tags{'locus_tag'}, $tags{'start'}, $tags{'stop'}, $tags{'dir'});
-                    my $o_prod = $tags{'product'} if $tags{'product'};
-                    print $crdout "$o_id\t$c_id\t$o_start\t$o_stop\t$o_dir\t";
-                    print $crdout "$o_prod" if $o_prod;
-                    print $crdout "\n";
-                    $loccount++;
-                }
-                undef %tags;
-                $is_prod = "";
-                $is_cds = "";
-                if ($type eq "CDS"){
-                    ($start, $stop) = ($stop, $start) if $start > $stop;
-                    $tags{'start'} = $start;
-                    $tags{'stop'} = $stop;
-                    $tags{'dir'} = $dir;
-                    $is_cds = 1;
-                }
-                next;
-            }
-            if ($is_cds and $line !~ m/^ORIGIN/){
-                if ($line =~ m/^\s+\/(\S+)=\"*([^"]*)\"*/){
-                    my ($key, $val) = ($1, $2);
-                    if ($key eq "locus_tag" or $key eq "product"){
-                        $val =~ s/\s*$//;
-                        $tags{$key} = $val;
-                        $is_prod = 1 if $key eq "product";
-                        next;
+            if ($reading == 1){
+                if ($line =~ m/^LOCUS\s+([^\s]+)/){
+                    $seqcount++;
+                    if ($line =~ m/^LOCUS\s+(\S+)\s+\d+ bp/){
+                        $c_id = $1;
                     } else {
-                        $is_prod = "";
+                        $c_id = "rec$seqcount";
                     }
-                } else {
-                    if ($is_prod){
-                        $line =~ s/^\s*//;
-                        $line =~ s/\"//g;
-                        $tags{'product'} .= " $line";
+                    push @ctg_order, $c_id;
+                    next;
+                }
+                if ($line =~ m/^FEATURES\s+Location\/Qualifiers/){
+                    $reading = 2;
+                    next;
+                }
+            } elsif ($reading == 2){
+                if ($line =~ m/^\s+(\S+)\s+(complement\()*[<>]*(\d+)<*\.\.[<>]*(\d+)>*\)*\s*$/){
+                    $is_prod = "";
+                    my ($type, $start, $stop) = ($1, $3, $4);
+                    my $dir = "+";
+                    $dir = "-" if $2;
+                    unless ($crecs{$c_id}{$start}{$stop}{$dir}){
+                        @{$crecs{$c_id}{$start}{$stop}{$dir}} = (0);
                     }
+                    if ($type eq "CDS"){
+                        ${$crecs{$c_id}{$start}{$stop}{$dir}}[0] = 1;
+                        $loccount++;
+                    }
+                    if (@tags){
+                        my ($o_start, $o_stop, $o_dir) = @tags;
+                        ${$crecs{$c_id}{$o_start}{$o_stop}{$o_dir}}[1] = $tags[3] if $tags[3];
+                        ${$crecs{$c_id}{$o_start}{$o_stop}{$o_dir}}[2] = $tags[4] if $tags[4];
+                        $loccount++;
+                    }
+                    @tags = ($start, $stop, $dir);
+                    next;
                 }
-                next;
-            }
-            if ($line =~ m/^ORIGIN/){
-                if (%tags  and $filetype eq "Q"){
-                    return(3) unless $tags{'locus_tag'}; #no locus_tag was present on the last record
-                    my ($o_id, $o_start, $o_stop, $o_dir) = ($tags{'locus_tag'}, $tags{'start'}, $tags{'stop'}, $tags{'dir'});
-                    my $o_prod = $tags{'product'} if $tags{'product'};
-                    print $crdout "$o_id\t$c_id\t$o_start\t$o_stop\t$o_dir";
-                    print $crdout "\t$o_prod" if $o_prod;
-                    print $crdout "\n";
-                    $loccount++;
+                if ($line =~ m/^ORIGIN\s*$/){
+                    $is_prod = "";
+                    if (@tags){
+                        my ($o_start, $o_stop, $o_dir) = @tags;
+                        ${$crecs{$c_id}{$o_start}{$o_stop}{$o_dir}}[1] = $tags[3] if $tags[3];
+                        ${$crecs{$c_id}{$o_start}{$o_stop}{$o_dir}}[2] = $tags[4] if $tags[4];
+                        $loccount++;
+                    }
+                    undef @tags;
+                    $reading = 3;
+                    next
                 }
-                undef %tags;
-                $is_prod = "";
-                $is_cds = "";
-                #if ($start){ #no locus_tag was present on the last record
-                #    return (3);
-                #}
-                $is_origin = 1;
-                next;
-            }
-            if ($is_origin and $line =~ m/^\s*\d+\s(.*)/){
-                my $seqline = $1;
-                $seqline =~ s/\s//g;
-                if ($seqline =~ m/[^ACTGNactgn]/){
-                    ###since sequences may contain some IUPAC ambiguity codes other than "N" I'll ignore this for now
-                    #return (4);
+                if ($line =~ m/^\s+\/(\S+)=\"*([^"]*)\"*/){
+                    $is_prod = "";
+                    my ($key, $val) = ($1, $2);
+                    if ($key eq "locus_tag"){
+                        $tags[3] = $val;
+                    }
+                    if ($key eq "product"){
+                        $tags[4] = $val;
+                        $is_prod = 1;
+                    }
+                    next;
                 }
-                $c_seq .= $seqline;
+                if ($is_prod){
+                    $line =~ s/^\s*//;
+                    $line =~ s/"*\s*$//;
+                    $tags[4] .= " $line";
+                }
+            } elsif ($reading == 3){
+                $line =~ s/\d//g;
+                $line =~ s/\s//g;
+                $c_seq .= $line;
                 next;
             }
         }
     }
-    if ($c_id){
-        if (!$c_seq){
-            close ($seqout);
-            unlink ("$filepref.fasta");
-            return (2);
-        }
+    if ($c_seq and $c_id){
         print $seqout ">$c_id\n$c_seq\n";
         $c_seq = "";
-        #($start, $stop) = ("") x 2;
+        $reading = 1;
     }
     close ($gbkin);
     close ($seqout);
-    if ($filetype eq "Q" and !$coords){
+    
+    if ($filetype eq "Q" and !$opt_c){
         if ($loccount > 0){
             $coords = "$filepref.coords.txt";
             push @temp_list, "$filepref.coords.txt";
+            open (my $crdout, ">>$coords") or die "Can't open temporary file: $!\n";
+            foreach my $cid (@ctg_order){
+                foreach my $start (sort{$a <=> $b} keys %{$crecs{$cid}}){
+                    foreach my $stop (sort{$a <=> $b} keys %{$crecs{$cid}{$start}}){
+                        foreach my $dir (sort keys %{$crecs{$cid}{$start}{$stop}}){
+                            my ($is_cds, $lid, $prod) = @{$crecs{$cid}{$start}{$stop}{$dir}};
+                            if ($is_cds){
+                                unless ($lid){
+                                    close ($crdout);
+                                    unlink ($coords);
+                                    print STDERR "ERROR: CDS at $start..$stop on contig $cid has no locus_id\n";
+                                    print STDERR "<br>\n" if $opt_w;
+                                    return(3);
+                                }
+                                print $crdout "$lid\t$cid\t$start\t$stop\t$dir\t";
+                                print $crdout "$prod" if $prod;
+                                print $crdout "\n";
+                            }
+                        }
+                    }
+                }
+            }
+            close ($crdout);
         } else { #if no CDS records and/or no locus_ids were found in the genbank file
             if ($opt_w){
                 print STDERR "<strong>****</strong><br>\n";
@@ -665,7 +721,6 @@ sub gbk_convert{
                 ";
             }
         }
-        close ($crdout);
     }
     return (0);
 }
