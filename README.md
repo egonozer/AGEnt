@@ -38,7 +38,7 @@ Example:
 ```
 
   `-r`  
-File of reference sequence(s) in Fasta or Genbank format. 
+File of core / reference sequence(s) in Fasta or Genbank format. 
 
 AGEnt will try to guess what type of file you have entered based on the suffix (Fasta if suffix is .fasta or .fa, Genbank if suffix is .gbk or .gb). If you would like to set this manually, use the -R option (see below).
 

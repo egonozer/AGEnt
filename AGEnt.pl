@@ -225,8 +225,8 @@ my @temp_list;
 #Read in coordinates file (if given)
 if ($coords){
     my @cfiles = split(",", $coords);
-    open (my $crdout, ">temp_$pref\_$spref\_qry.coords.txt") or die "Can't open temporary file: $!\n";
-    push @temp_list, "temp_$pref\_$spref\_qry.coords.txt";
+    open (my $crdout, ">$pref\_$spref\_temp_qry.coords.txt") or die "Can't open temporary file: $!\n";
+    push @temp_list, "$pref\_$spref\_temp_qry.coords.txt";
     my $count = 0;
     foreach my $cfile (@cfiles){
         open (my $cin, "<$cfile") or die "ERROR: Can't open $cfile: $!\n";
@@ -388,7 +388,7 @@ if ($coords){
     close ($crdout);
     print STDERR "Read in $count total annotation records from coordinate file(s)\n";
     print STDERR "<br>\n" if $opt_w;
-    $coords = "temp_$pref\_$spref\_qry.coords.txt";
+    $coords = "$pref\_$spref\_temp_qry.coords.txt";
 }
 
 #check input sequence file types (trying to be flexible)
@@ -424,18 +424,18 @@ if (!$man_r){
 }
 
 #read in reference file
-push @temp_list, "temp_$pref\_$spref\_ref.fasta";
+push @temp_list, "$pref\_$spref\_temp_ref.fasta";
 if ($man_r eq "G"){
     print STDERR "Processing reference genbank file ...\n";
     print STDERR "<br>\n" if $opt_w;
-    my $rpref = "temp_$pref\_$spref\_ref";
+    my $rpref = "$pref\_$spref\_temp_ref";
     my $status = gbk_convert($rfile, $rpref, "R");
     die "ERROR: Reference Genbank file does not contain DNA sequence. Please check file.\n" if ($status == 2);
 } else {
     print STDERR "Processing reference fasta file ...\n";
     print STDERR "<br>\n" if $opt_w;
     open (my $r_in, "<$rfile") or die "ERROR: Can't open reference sequence file $rfile: $!\n";
-    open (my $r_out, ">temp_$pref\_$spref\_ref.fasta") or die "ERROR: Can't open temporary output file: $!\n";
+    open (my $r_out, ">$pref\_$spref\_temp_ref.fasta") or die "ERROR: Can't open temporary output file: $!\n";
     while (my $fline = <$r_in>){
         $fline =~ s/\R/\012/g; #converts to UNIX-style line endings
         my @lines = split("\n", $fline); #need to split lines by line-ending character in the case of Mac-formatted files which only have CR line terminators, not both CR and LF like DOS
@@ -447,23 +447,23 @@ if ($man_r eq "G"){
     close ($r_in);
     close ($r_out);
 }
-my $r_source = "temp_$pref\_$spref\_ref.fasta";
+my $r_source = "$pref\_$spref\_temp_ref.fasta";
 
 #read in query file(s)
-push @temp_list, "temp_$pref\_$spref\_qry.fasta";
+push @temp_list, "$pref\_$spref\_temp_qry.fasta";
 my @qfiles = split(",", $qfile);
 foreach my $qf (@qfiles){
     if ($man_q eq "G"){
         print STDERR "Processing query genome genbank file ...\n";
         print STDERR "<br>\n" if $opt_w;
-        my $status = gbk_convert($qf, "temp_$pref\_$spref\_qry", "Q");
+        my $status = gbk_convert($qf, "$pref\_$spref\_temp_qry", "Q");
         die "ERROR: Query Genbank file does not contain DNA sequence. Please check file.\n" if ($status == 2);
         die "ERROR: CDS records in query file missing \"locus_tag\" tags. Please check file and visit http://vfsmspineagent.fsm.northwestern.edu/gbk_reformat.cgi for conversion tool.\n" if ($status == 3);
     } else {
         print STDERR "Processing query genome fasta file ...\n";
         print STDERR "<br>\n" if $opt_w;
         open (my $q_in, "<$qf") or die "ERROR: Can't open query sequence file $qf: $!\n";
-        open (my $q_out, ">>temp_$pref\_$spref\_qry.fasta") or die "ERROR: Can't open temporary output file: $!\n";
+        open (my $q_out, ">>$pref\_$spref\_temp_qry.fasta") or die "ERROR: Can't open temporary output file: $!\n";
         while (my $fline = <$q_in>){
             $fline =~ s/\R/\012/g; #converts to UNIX-style line endings
             my @lines = split("\n", $fline); #need to split lines by line-ending character in the case of Mac-formatted files which only have CR line terminators, not both CR and LF like DOS
@@ -476,11 +476,11 @@ foreach my $qf (@qfiles){
         close ($q_out);
     }
 }
-my $q_source = "temp_$pref\_$spref\_qry.fasta";
+my $q_source = "$pref\_$spref\_temp_qry.fasta";
 
 #Align with nucmer
-push @temp_list, "temp_$pref\_$spref\_align.delta";
-my $n_command = "$nuc_loc --maxmatch -p temp_$pref\_$spref\_align $r_source $q_source";
+push @temp_list, "$pref\_$spref\_temp_align.delta";
+my $n_command = "$nuc_loc --maxmatch -p $pref\_$spref\_temp_align $r_source $q_source";
 print STDERR "<br>\n<h1>" if $opt_w;
 print STDERR "\nRunning Nucmer ...\n";
 print STDERR "</h1><br>\n" if $opt_w;
@@ -495,7 +495,7 @@ print STDERR "</h1><br>\n" if $opt_w;
 my $return;
 {
     our ($opt_d, $opt_V);
-    local $opt_d = "temp_$pref\_$spref\_align.delta";
+    local $opt_d = "$pref\_$spref\_temp_align.delta";
     local $opt_m = $minalgn;
     local $opt_s = $minsize;
     local $opt_q = $q_source;

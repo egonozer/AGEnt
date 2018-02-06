@@ -54,7 +54,7 @@ fasta or all genbank. No mixing and matching!
 Example:
 -q /path/to/chrom_I.fasta,/path/to/chrom_II.fasta,/path/to/plasmid.fasta
 
-  -r    File of reference sequence(s) in Fasta or Genbank format. 
+  -r    File of core / reference sequence(s) in Fasta or Genbank format. 
 
 AGEnt will try to guess what type of file you have entered based on
 the suffix (Fasta if suffix is .fasta or .fa, Genbank if suffix is
